@@ -82,6 +82,16 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"ok": ok})
             return
 
+        if self.path == "/discover":
+            import socket
+            hostname = socket.gethostname()
+            self._json({
+                "ok": True,
+                "hostname": hostname,
+                "webhook_port": 8765,
+            })
+            return
+
         self._json({"error": "not found"}, 404)
 
     def log_message(self, *args):

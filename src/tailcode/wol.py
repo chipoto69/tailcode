@@ -75,9 +75,14 @@ def wake_device(device: Device, config: Config, relay: Device | None = None) -> 
 def find_wake_relay(target: Device, config: Config) -> Device | None:
     from tailcode.tailscale import is_peer_online
     
+    configured_relay = config.get_wake_relay_for_location(target.location)
+    if configured_relay and configured_relay.name != target.name and is_peer_online(configured_relay.hostname):
+        return configured_relay
+    
     for device in config.get_servers():
         if device.name == target.name:
             continue
         if device.location == target.location and is_peer_online(device.hostname):
             return device
+    
     return None

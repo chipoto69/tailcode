@@ -15,6 +15,7 @@ class Device:
     mac: str | None = None
     role: Role = "server"
     location: str = ""
+    always_on: bool = False
 
     @property
     def can_wake(self) -> bool:
@@ -23,6 +24,10 @@ class Device:
     @property
     def can_connect(self) -> bool:
         return self.role == "server"
+    
+    @property
+    def is_wake_relay(self) -> bool:
+        return self.always_on and self.role == "server"
 
 
 @dataclass
@@ -50,8 +55,15 @@ class SSHConfig:
 
 
 @dataclass
+class Location:
+    name: str
+    wake_relay: str | None = None
+
+
+@dataclass
 class Preferences:
     default_device: str = ""
+    default_tool: str = "opencode"
     auto_wake: bool = True
 
 
@@ -59,6 +71,7 @@ class Preferences:
 class Config:
     tailscale: TailscaleConfig = field(default_factory=TailscaleConfig)
     devices: dict[str, Device] = field(default_factory=dict)
+    locations: dict[str, Location] = field(default_factory=dict)
     notifications: NotificationConfig = field(default_factory=NotificationConfig)
     ssh: SSHConfig = field(default_factory=SSHConfig)
     preferences: Preferences = field(default_factory=Preferences)
@@ -74,6 +87,18 @@ class Config:
             return self.get_device(self.preferences.default_device)
         servers = self.get_servers()
         return servers[0] if servers else None
+    
+    def get_location(self, name: str) -> Location | None:
+        return self.locations.get(name)
+    
+    def get_wake_relay_for_location(self, location: str) -> Device | None:
+        loc = self.get_location(location)
+        if loc and loc.wake_relay:
+            return self.get_device(loc.wake_relay)
+        for device in self.devices.values():
+            if device.location == location and device.is_wake_relay:
+                return device
+        return None
 
 
 def _parse_device(name: str, data: dict[str, Any]) -> Device:
@@ -84,6 +109,14 @@ def _parse_device(name: str, data: dict[str, Any]) -> Device:
         mac=data.get("mac"),
         role=data.get("role", "server"),
         location=data.get("location", ""),
+        always_on=data.get("always_on", False),
+    )
+
+
+def _parse_location(name: str, data: dict[str, Any]) -> Location:
+    return Location(
+        name=data.get("name", name),
+        wake_relay=data.get("wake_relay"),
     )
 
 
@@ -97,6 +130,10 @@ def _parse_config(data: dict[str, Any]) -> Config:
     devices = {}
     for name, dev_data in data.get("devices", {}).items():
         devices[name] = _parse_device(name, dev_data)
+
+    locations = {}
+    for name, loc_data in data.get("locations", {}).items():
+        locations[name] = _parse_location(name, loc_data)
 
     notif_data = data.get("notifications", {})
     ntfy_data = notif_data.get("ntfy", {})
@@ -117,12 +154,14 @@ def _parse_config(data: dict[str, Any]) -> Config:
     pref_data = data.get("preferences", {})
     preferences = Preferences(
         default_device=pref_data.get("default_device", ""),
+        default_tool=pref_data.get("default_tool", "opencode"),
         auto_wake=pref_data.get("auto_wake", True),
     )
 
     return Config(
         tailscale=tailscale,
         devices=devices,
+        locations=locations,
         notifications=notifications,
         ssh=ssh,
         preferences=preferences,

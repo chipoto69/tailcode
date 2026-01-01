@@ -146,14 +146,13 @@ def serve(
     run_server("0.0.0.0", port)
 
 
-@app.command()
-def ai(
-    device_name: str = typer.Argument(None, help="Device to connect to"),
-    project: str = typer.Option(None, "--project", "-p", help="Project directory to cd into"),
-    wake: bool = typer.Option(True, "--wake/--no-wake", "-w/-W", help="Auto-wake if offline"),
+def _ai_connect(
+    device_name: str | None,
+    project: str | None,
+    wake: bool,
+    tool: str,
 ):
-    """Connect to a device and launch Claude Code."""
-    from tailcode.ssh import is_reachable, ssh_connect_with_command
+    from tailcode.ssh import ssh_connect_with_command
     from tailcode.tailscale import is_peer_online
 
     config = get_config()
@@ -184,16 +183,37 @@ def ai(
             console.print(f"[red]{device_name} is offline[/red]")
             raise typer.Exit(1)
 
-    console.print(f"Connecting to [cyan]{device_name}[/cyan] + Claude Code...")
+    tool_cmd = tool if tool else config.preferences.default_tool
+    tool_display = "Claude Code" if tool_cmd == "claude" else "OpenCode"
     
-    # Build the claude command with optional project directory
-    if project:
-        claude_cmd = f"cd {project} && claude"
-    else:
-        claude_cmd = "claude"
+    console.print(f"Connecting to [cyan]{device_name}[/cyan] + {tool_display}...")
     
-    exit_code = ssh_connect_with_command(device, config, claude_cmd)
+    cmd = f"cd {project} && {tool_cmd}" if project else tool_cmd
+    
+    exit_code = ssh_connect_with_command(device, config, cmd)
     raise typer.Exit(exit_code)
+
+
+@app.command()
+def ai(
+    device_name: str = typer.Argument(None, help="Device to connect to"),
+    project: str = typer.Option(None, "--project", "-p", help="Project directory to cd into"),
+    wake: bool = typer.Option(True, "--wake/--no-wake", "-w/-W", help="Auto-wake if offline"),
+    tool: str = typer.Option(None, "--tool", "-t", help="AI tool to launch: opencode (default) or claude"),
+):
+    """Connect to a device and launch AI coding assistant (OpenCode or Claude Code)."""
+    _ai_connect(device_name, project, wake, tool or "opencode")
+
+
+@app.command()
+def opencode(
+    device_name: str = typer.Argument(None, help="Device to connect to"),
+    project: str = typer.Option(None, "--project", "-p", help="Project directory to cd into"),
+    wake: bool = typer.Option(True, "--wake/--no-wake", "-w/-W", help="Auto-wake if offline"),
+    tool: str = typer.Option(None, "--tool", "-t", help="AI tool to launch: opencode (default) or claude"),
+):
+    """Connect to a device and launch OpenCode (alias for 'tc ai')."""
+    _ai_connect(device_name, project, wake, tool or "opencode")
 
 
 @app.command()
@@ -289,6 +309,127 @@ def discover(
     console.print(f"[green]Config written: {output}[/green]")
     console.print(f"\nDiscovered {len(devices)} devices")
     console.print("\n[yellow]TODO:[/yellow] Edit config to add MAC addresses for Wake-on-LAN")
+
+
+@app.command()
+def location(
+    set_location: str = typer.Argument(None, help="Location to set (e.g., east_front, west_front)"),
+):
+    """Show or set current location context."""
+    config = get_config()
+    
+    if set_location:
+        if set_location not in config.locations and set_location != "auto":
+            available = ", ".join(config.locations.keys()) if config.locations else "none configured"
+            console.print(f"[red]Unknown location: {set_location}[/red]")
+            console.print(f"Available: {available}")
+            raise typer.Exit(1)
+        console.print(f"[green]Location set to: {set_location}[/green]")
+        console.print("[dim]Note: This is informational only. Auto-detection is used for wake relay.[/dim]")
+        return
+    
+    table = Table(title="Locations")
+    table.add_column("Name", style="cyan")
+    table.add_column("Display Name")
+    table.add_column("Wake Relay")
+    table.add_column("Relay Status")
+    
+    from tailcode.tailscale import is_peer_online
+    
+    for name, loc in config.locations.items():
+        relay_device = config.get_device(loc.wake_relay) if loc.wake_relay else None
+        if relay_device:
+            online = is_peer_online(relay_device.hostname)
+            relay_status = "[green]online[/green]" if online else "[dim]offline[/dim]"
+            relay_name = loc.wake_relay
+        else:
+            relay_status = "[dim]none[/dim]"
+            relay_name = "-"
+        table.add_row(name, loc.name, relay_name, relay_status)
+    
+    console.print(table)
+
+
+@app.command()
+def setup():
+    """Interactive setup wizard for first-time configuration."""
+    from pathlib import Path
+    
+    console.print("\n[bold cyan]Tailcode Setup Wizard[/bold cyan]\n")
+    
+    config_path = Path.home() / ".config" / "tailcode" / "config.yaml"
+    
+    if config_path.exists():
+        console.print(f"[yellow]Config already exists: {config_path}[/yellow]")
+        if not typer.confirm("Run setup anyway?"):
+            raise typer.Exit(0)
+    
+    console.print("\n[bold]Step 1: Discover Tailscale devices[/bold]")
+    console.print("This will find all devices on your Tailscale network.\n")
+    
+    from tailcode.discover import discover_devices
+    
+    devices = discover_devices()
+    if not devices:
+        console.print("[red]No devices found. Is Tailscale running?[/red]")
+        console.print("Run: tailscale status")
+        raise typer.Exit(1)
+    
+    console.print(f"[green]Found {len(devices)} devices[/green]\n")
+    
+    for i, d in enumerate(devices, 1):
+        status = "[green]online[/green]" if d["online"] else "[dim]offline[/dim]"
+        self_marker = " [yellow](this device)[/yellow]" if d.get("is_self") else ""
+        console.print(f"  {i}. {d['hostname']} ({d['os']}) {status}{self_marker}")
+    
+    console.print("\n[bold]Step 2: Configure default user[/bold]")
+    default_user = typer.prompt("SSH username for your Macs", default="")
+    
+    console.print("\n[bold]Step 3: Set default device[/bold]")
+    console.print("Which device should be the default for 'tc connect'?")
+    
+    server_devices = [d for d in devices if d["os"] in ("macOS", "linux", "Linux")]
+    if server_devices:
+        for i, d in enumerate(server_devices, 1):
+            console.print(f"  {i}. {d['hostname']}")
+        
+        choice = typer.prompt("Enter number", default="1")
+        try:
+            default_device = server_devices[int(choice) - 1]["hostname"]
+        except (ValueError, IndexError):
+            default_device = server_devices[0]["hostname"] if server_devices else ""
+    else:
+        default_device = ""
+    
+    console.print("\n[bold]Step 4: Notification setup (optional)[/bold]")
+    console.print("Tailcode can send push notifications via ntfy.sh")
+    setup_ntfy = typer.confirm("Set up notifications?", default=False)
+    
+    ntfy_topic = ""
+    if setup_ntfy:
+        ntfy_topic = typer.prompt("ntfy topic name", default=f"tailcode-{default_user or 'alerts'}")
+    
+    console.print("\n[bold]Step 5: Generate config[/bold]")
+    
+    from tailcode.discover import generate_config_yaml
+    
+    yaml_content = generate_config_yaml(devices, user=default_user)
+    
+    if ntfy_topic:
+        yaml_content = yaml_content.replace('topic: "tailcode-alerts"', f'topic: "{ntfy_topic}"')
+    
+    if default_device:
+        yaml_content = yaml_content.replace('default_device: ""', f'default_device: "{default_device}"')
+    
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(yaml_content)
+    
+    console.print(f"\n[green]Config saved: {config_path}[/green]")
+    console.print("\n[bold]Next steps:[/bold]")
+    console.print("  1. Edit config to add MAC addresses for Wake-on-LAN")
+    console.print("  2. Run [cyan]tc status[/cyan] to verify devices")
+    console.print("  3. Run [cyan]tc connect[/cyan] to test connection")
+    console.print("  4. Run [cyan]tc install[/cyan] to set up webhook server")
 
 
 def _do_wake(device, config):

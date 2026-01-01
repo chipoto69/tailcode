@@ -1,24 +1,41 @@
-tailscale:
-  api_key: "tskey-api-xxxxx"
-  tailnet: "-"
+locations:
+  east_front:
+    name: "East Front"
+    wake_relay: macmini
+    
+  west_front:
+    name: "West Front"
+    wake_relay: macbook1
 
 devices:
   macmini:
-    hostname: "macmini"
-    mac: "00:00:00:00:00:00"
+    hostname: "mac-mini"
+    mac: "AA:BB:CC:DD:EE:FF"
     user: "filip"
     role: server
-    location: home
+    location: east_front
+    always_on: true
     
-  macbook:
-    hostname: "macbook-pro"
-    mac: "00:00:00:00:00:00"
+  macbook1:
+    hostname: "macbook-pro-1"
+    mac: "11:22:33:44:55:66"
     user: "filip"
     role: server
-    location: mobile
+    location: west_front
+    
+  macbook2:
+    hostname: "macbook-pro-2"
+    mac: "77:88:99:AA:BB:CC"
+    user: "filip"
+    role: server
+    location: west_front
 
   ipad:
     hostname: "ipad-pro"
+    role: client
+
+  iphone:
+    hostname: "filips-iphone"
     role: client
 
 notifications:
@@ -33,4 +50,5 @@ ssh:
 
 preferences:
   default_device: "macmini"
+  default_tool: "opencode"
   auto_wake: true
