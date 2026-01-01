@@ -1,0 +1,188 @@
+{
+  "version": "1.0",
+  "description": "Tailcode Shortcut Templates for iPad",
+  "note": "These are templates for creating Apple Shortcuts. Copy the actions to Shortcuts app.",
+  
+  "config": {
+    "webhook_host": "YOUR-MAC-HOSTNAME",
+    "webhook_port": 8765,
+    "default_device": "macmini"
+  },
+  
+  "shortcuts": [
+    {
+      "name": "Wake Mac Mini",
+      "icon": "sun.max.fill",
+      "color": "orange",
+      "actions": [
+        {
+          "type": "get_url",
+          "url": "http://${webhook_host}:${webhook_port}/wake",
+          "method": "POST",
+          "headers": {"Content-Type": "application/json"},
+          "body": {"device": "macmini"}
+        },
+        {
+          "type": "notification",
+          "title": "Wake Sent",
+          "body": "Mac Mini waking up..."
+        }
+      ]
+    },
+    
+    {
+      "name": "Wake MacBook",
+      "icon": "sun.max.fill",
+      "color": "blue",
+      "actions": [
+        {
+          "type": "get_url",
+          "url": "http://${webhook_host}:${webhook_port}/wake",
+          "method": "POST",
+          "headers": {"Content-Type": "application/json"},
+          "body": {"device": "macbook"}
+        },
+        {
+          "type": "notification",
+          "title": "Wake Sent",
+          "body": "MacBook waking up..."
+        }
+      ]
+    },
+    
+    {
+      "name": "Device Status",
+      "icon": "list.bullet",
+      "color": "teal",
+      "actions": [
+        {
+          "type": "get_url",
+          "url": "http://${webhook_host}:${webhook_port}/status",
+          "method": "POST"
+        },
+        {
+          "type": "show_result"
+        }
+      ]
+    },
+    
+    {
+      "name": "Connect Mac Mini",
+      "icon": "terminal.fill",
+      "color": "purple",
+      "actions": [
+        {
+          "type": "open_url",
+          "url": "blinkshell://run?key=macmini"
+        }
+      ]
+    },
+    
+    {
+      "name": "Connect MacBook",
+      "icon": "terminal.fill",
+      "color": "indigo",
+      "actions": [
+        {
+          "type": "open_url",
+          "url": "blinkshell://run?key=macbook"
+        }
+      ]
+    },
+    
+    {
+      "name": "Smart Connect (Wake + SSH)",
+      "icon": "bolt.fill",
+      "color": "yellow",
+      "description": "Wakes device if needed, then connects",
+      "actions": [
+        {
+          "type": "get_url",
+          "url": "http://${webhook_host}:${webhook_port}/wake",
+          "method": "POST",
+          "headers": {"Content-Type": "application/json"},
+          "body": {"device": "macmini"}
+        },
+        {
+          "type": "wait",
+          "seconds": 15
+        },
+        {
+          "type": "open_url",
+          "url": "blinkshell://run?key=macmini"
+        }
+      ]
+    },
+    
+    {
+      "name": "AI Session",
+      "icon": "brain.head.profile",
+      "color": "pink",
+      "description": "Wake, connect, and start Claude Code",
+      "actions": [
+        {
+          "type": "get_url",
+          "url": "http://${webhook_host}:${webhook_port}/wake",
+          "method": "POST",
+          "headers": {"Content-Type": "application/json"},
+          "body": {"device": "macmini"}
+        },
+        {
+          "type": "notification",
+          "title": "Waking Mac Mini",
+          "body": "Starting AI session..."
+        },
+        {
+          "type": "wait",
+          "seconds": 20
+        },
+        {
+          "type": "open_url",
+          "url": "blinkshell://run?key=macmini&cmd=tmux%20new-session%20-A%20-s%20ai%20%5C%3B%20send-keys%20%27claude%27%20Enter"
+        }
+      ]
+    },
+    
+    {
+      "name": "Health Check",
+      "icon": "heart.fill",
+      "color": "red",
+      "actions": [
+        {
+          "type": "get_url",
+          "url": "http://${webhook_host}:${webhook_port}/health",
+          "method": "GET"
+        },
+        {
+          "type": "if",
+          "condition": "contains 'ok'",
+          "then": {
+            "type": "notification",
+            "title": "Tailcode",
+            "body": "Server is healthy!"
+          },
+          "else": {
+            "type": "notification",
+            "title": "Tailcode",
+            "body": "Server not responding"
+          }
+        }
+      ]
+    }
+  ],
+  
+  "blink_hosts": [
+    {
+      "key": "macmini",
+      "description": "Mac Mini - home server",
+      "host": "mac-mini (Tailscale hostname)",
+      "user": "your-username"
+    },
+    {
+      "key": "macbook",
+      "description": "MacBook Pro - mobile workstation",
+      "host": "macbook-pro (Tailscale hostname)",
+      "user": "your-username"
+    }
+  ]
+}

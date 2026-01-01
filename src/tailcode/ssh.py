@@ -40,6 +40,26 @@ def ssh_connect(device: Device, config: Config, with_session: bool = True) -> in
     return result.returncode
 
 
+def ssh_connect_with_command(device: Device, config: Config, command: str) -> int:
+    """Connect to device with tmux session and run a command in it."""
+    if config.ssh.use_tailscale_ssh:
+        cmd = ["tailscale", "ssh"]
+    else:
+        cmd = ["ssh"]
+
+    target = f"{device.user}@{device.hostname}" if device.user else device.hostname
+    cmd.append(target)
+
+    # Create or attach to tmux session, running the command in it
+    session = config.ssh.session_name
+    # Use tmux send-keys to run command in session, then attach
+    tmux_cmd = f"tmux new-session -A -s {session} \\; send-keys '{command}' Enter"
+    cmd.append(tmux_cmd)
+
+    result = subprocess.run(cmd)
+    return result.returncode
+
+
 def is_reachable(device: Device, config: Config, timeout: int = 5) -> bool:
     try:
         result = ssh_exec(device, config, "echo ok", timeout=timeout)

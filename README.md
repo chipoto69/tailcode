@@ -30,18 +30,19 @@ cd tailcode
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e .
 
-# Setup each Mac
-./scripts/mac-setup.sh
+# Auto-discover devices from Tailscale
+tc discover --user filip
 
-# Configure
-mkdir -p ~/.config/tailcode
+# Or manually configure
 cp config/config.example.yaml ~/.config/tailcode/config.yaml
-# Edit with your devices, MACs, hostnames
+
+# Setup each Mac (enables Remote Login, WoL)
+./scripts/mac-setup.sh
 
 # Use
 tc status           # See devices
 tc connect          # Connect to default
-tc wake macmini     # Wake specific device
+tc ai               # Connect + Claude Code
 ```
 
 ## Commands
@@ -50,10 +51,13 @@ tc wake macmini     # Wake specific device
 |---------|-------------|
 | `tc status` | Show all devices and online status |
 | `tc connect [device]` | SSH + tmux to device (auto-wake) |
+| `tc ai [device]` | Connect + launch Claude Code |
 | `tc wake <device>` | Send Wake-on-LAN |
 | `tc run <device> <cmd>` | Run command remotely |
-| `tc notify <msg>` | Push notification to phone |
+| `tc discover` | Auto-discover devices from Tailscale |
+| `tc install` | Install webhook as launchd service |
 | `tc serve` | Start webhook for iPad Shortcuts |
+| `tc notify <msg>` | Push notification to phone |
 
 ## Config
 
@@ -90,12 +94,17 @@ preferences:
 
 ## iPad Workflow
 
-1. Run `tc serve` on MacBook (webhook server)
-2. Create Shortcuts on iPad:
-   - **Wake**: POST to `http://macbook-pro:8765/wake` with `{"device": "macmini"}`
+1. Install webhook server on your Mac:
+   ```bash
+   tc install  # Auto-starts on boot
+   ```
+
+2. Create Shortcuts on iPad (see `shortcuts/README.md`):
+   - **Wake**: POST to `http://macbook-pro:8765/wake`
    - **Connect**: Open `blinkshell://run?key=macmini`
-3. Add to home screen widget
-4. One tap → wake → connect
+   - **AI Session**: Wake + Connect + Claude Code
+
+3. Add to home screen widget for one-tap access
 
 ## Wake-on-LAN Logic
 

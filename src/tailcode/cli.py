@@ -146,6 +146,151 @@ def serve(
     run_server("0.0.0.0", port)
 
 
+@app.command()
+def ai(
+    device_name: str = typer.Argument(None, help="Device to connect to"),
+    project: str = typer.Option(None, "--project", "-p", help="Project directory to cd into"),
+    wake: bool = typer.Option(True, "--wake/--no-wake", "-w/-W", help="Auto-wake if offline"),
+):
+    """Connect to a device and launch Claude Code."""
+    from tailcode.ssh import is_reachable, ssh_connect_with_command
+    from tailcode.tailscale import is_peer_online
+
+    config = get_config()
+
+    if device_name is None:
+        device = config.get_default_device()
+        if not device:
+            console.print("[red]No default device configured[/red]")
+            raise typer.Exit(1)
+        device_name = device.name
+    else:
+        device = config.get_device(device_name)
+
+    if not device:
+        console.print(f"[red]Device '{device_name}' not found[/red]")
+        raise typer.Exit(1)
+
+    if not device.can_connect:
+        console.print(f"[red]{device_name} is a client device, can't connect to it[/red]")
+        raise typer.Exit(1)
+
+    if not is_peer_online(device.hostname):
+        if wake and device.can_wake:
+            console.print(f"[yellow]{device_name} offline, waking...[/yellow]")
+            _do_wake(device, config)
+            _wait_for_device(device, config, timeout=60)
+        else:
+            console.print(f"[red]{device_name} is offline[/red]")
+            raise typer.Exit(1)
+
+    console.print(f"Connecting to [cyan]{device_name}[/cyan] + Claude Code...")
+    
+    # Build the claude command with optional project directory
+    if project:
+        claude_cmd = f"cd {project} && claude"
+    else:
+        claude_cmd = "claude"
+    
+    exit_code = ssh_connect_with_command(device, config, claude_cmd)
+    raise typer.Exit(exit_code)
+
+
+@app.command()
+def install(
+    port: int = typer.Option(8765, "--port", "-p", help="Webhook server port"),
+    uninstall: bool = typer.Option(False, "--uninstall", "-u", help="Remove the service"),
+    show_status: bool = typer.Option(False, "--status", "-s", help="Show service status"),
+):
+    """Install webhook server as a launchd service (auto-starts on boot)."""
+    from tailcode.install import install_service, service_status, uninstall_service
+
+    if show_status:
+        status = service_status()
+        table = Table(title="Webhook Service")
+        table.add_column("Property")
+        table.add_column("Value")
+        
+        table.add_row("Installed", "[green]yes[/green]" if status["installed"] else "[dim]no[/dim]")
+        table.add_row("Running", "[green]yes[/green]" if status["running"] else "[dim]no[/dim]")
+        if status["pid"]:
+            table.add_row("PID", str(status["pid"]))
+        table.add_row("Plist", status["plist_path"])
+        table.add_row("Logs", status["log_path"])
+        
+        console.print(table)
+        return
+
+    if uninstall:
+        success, message = uninstall_service()
+        if success:
+            console.print(f"[green]{message}[/green]")
+        else:
+            console.print(f"[red]{message}[/red]")
+            raise typer.Exit(1)
+        return
+
+    success, message = install_service(port=port)
+    if success:
+        console.print(f"[green]{message}[/green]")
+        console.print(f"\nWebhook server will auto-start on boot (port {port})")
+        console.print("Check status: [cyan]tc install --status[/cyan]")
+        console.print("View logs: [cyan]tail -f ~/Library/Logs/tailcode/tailcode.log[/cyan]")
+    else:
+        console.print(f"[red]{message}[/red]")
+        raise typer.Exit(1)
+
+
+@app.command()
+def discover(
+    user: str = typer.Option("", "--user", "-u", help="Default SSH user for servers"),
+    output: Path = typer.Option(None, "--output", "-o", help="Output config file path"),
+    show: bool = typer.Option(False, "--show", "-s", help="Just show discovered devices"),
+):
+    """Discover devices from Tailscale and generate config."""
+    from tailcode.discover import discover_devices, generate_config_yaml, save_discovered_config
+
+    devices = discover_devices()
+    
+    if not devices:
+        console.print("[red]No devices discovered. Is Tailscale running?[/red]")
+        raise typer.Exit(1)
+    
+    if show:
+        table = Table(title="Discovered Devices")
+        table.add_column("Hostname", style="cyan")
+        table.add_column("Name")
+        table.add_column("OS")
+        table.add_column("Status")
+        table.add_column("Self")
+        
+        for d in devices:
+            status = "[green]online[/green]" if d["online"] else "[dim]offline[/dim]"
+            is_self = "[yellow]<- you[/yellow]" if d.get("is_self") else ""
+            table.add_row(d["hostname"], d["name"], d["os"], status, is_self)
+        
+        console.print(table)
+        return
+    
+    if output is None:
+        output = Path.home() / ".config" / "tailcode" / "config.yaml"
+    
+    yaml_content = generate_config_yaml(devices, user=user)
+    
+    if output.exists():
+        console.print(f"[yellow]Config exists: {output}[/yellow]")
+        if not typer.confirm("Overwrite?"):
+            console.print("Aborted")
+            raise typer.Exit(0)
+    
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(yaml_content)
+    
+    console.print(f"[green]Config written: {output}[/green]")
+    console.print(f"\nDiscovered {len(devices)} devices")
+    console.print("\n[yellow]TODO:[/yellow] Edit config to add MAC addresses for Wake-on-LAN")
+
+
 def _do_wake(device, config):
     from tailcode.notify import notify
     from tailcode.wol import find_wake_relay, wake_device
