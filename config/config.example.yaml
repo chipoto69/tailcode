@@ -1,0 +1,36 @@
+tailscale:
+  api_key: "tskey-api-xxxxx"
+  tailnet: "-"
+
+devices:
+  macmini:
+    hostname: "macmini"
+    mac: "00:00:00:00:00:00"
+    user: "filip"
+    role: server
+    location: home
+    
+  macbook:
+    hostname: "macbook-pro"
+    mac: "00:00:00:00:00:00"
+    user: "filip"
+    role: server
+    location: mobile
+
+  ipad:
+    hostname: "ipad-pro"
+    role: client
+
+notifications:
+  provider: "ntfy"
+  ntfy:
+    server: "https://ntfy.sh"
+    topic: "tailcode-CHANGEME"
+
+ssh:
+  use_tailscale_ssh: true
+  session_name: "ai"
+
+preferences:
+  default_device: "macmini"
+  auto_wake: true

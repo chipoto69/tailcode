@@ -1,0 +1,3 @@
+# Ignore actual config (contains secrets)
+config.yaml
+*.secret
