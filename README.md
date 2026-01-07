@@ -104,7 +104,7 @@ devices:
   macmini:
     hostname: "mac-mini"
     mac: "AA:BB:CC:DD:EE:FF"
-    user: "filip"
+    user: "rudy"
     role: server
     location: east_front
     always_on: true
@@ -112,14 +112,14 @@ devices:
   macbook1:
     hostname: "macbook-pro-1"
     mac: "11:22:33:44:55:66"
-    user: "filip"
+    user: "rudy"
     role: server
     location: west_front
 
   macbook2:
     hostname: "macbook-pro-2"
     mac: "77:88:99:AA:BB:CC"
-    user: "filip"
+    user: "rudy"
     role: server
     location: west_front
 
